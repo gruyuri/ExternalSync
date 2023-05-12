@@ -11,6 +11,8 @@ using Microsoft.Extensions.Hosting;
 using Quartz;
 using Microsoft.Extensions.DependencyInjection;
 using SyncConsoleHost.Utils;
+using FluentScheduler;
+using Quartz.Impl.Matchers;
 
 namespace SyncConsoleHost
 {
@@ -23,22 +25,18 @@ namespace SyncConsoleHost
         private IHost host = null;
         private ConfigReader svcConfigReader = new ConfigReader();
 
-        private AppDomain dllDomain = null;
+        //private AppDomain dllDomain = null;
 
-        public AppDomain DllDomain
-        {
-            get
-            {
-                #pragma warning disable SYSLIB0024
+        //public AppDomain DllDomain
+        //{
+        //    get
+        //    {
+        //        if (dllDomain == null)
+        //            dllDomain = AppDomain.CreateDomain(Consts.APP_DOMAIN_NAME);
 
-                if (dllDomain == null)
-                    dllDomain = AppDomain.CreateDomain(Consts.APP_DOMAIN_NAME);
-
-                #pragma warning restore SYSLIB0024
-
-                return dllDomain;
-            }
-        }
+        //        return dllDomain;
+        //    }
+        //}
 
         public IHost ScheduleHost
         {
@@ -76,11 +74,11 @@ namespace SyncConsoleHost
             await StartProcessing(modules);
         }
 
-        public void StopModules() { }
-
-        public void RefreshSchedules()
+        public void StopModules() 
         {
+            FluentScheduler.JobManager.Stop();
 
+            ScheduleHost.StopAsync();
         }
 
         private async Task StartProcessing(List<ModuleDescriptor> modules)
@@ -100,9 +98,97 @@ namespace SyncConsoleHost
                 //}
             }
 
-            // Local process to re-read config: compare with Name + fullName + cronExpr
+            JobManager.AddJob(() => RefreshModuleList(),
+                        (s) => s.WithName("RefreshModuleList").ToRunEvery(2).Minutes());
+
+            FluentScheduler.JobManager.Start();
 
             await ScheduleHost.RunAsync();
+        }
+
+        private List<JobKey> GetAllJobKeys(IScheduler scheduler)
+        {
+            var result = new List<JobKey>();
+
+            var jobGroups = scheduler.GetJobGroupNames().Result;
+
+            foreach (string group in jobGroups)
+            {
+                var groupMatcher = GroupMatcher<JobKey>.GroupContains(group);
+                var jobKeys = scheduler.GetJobKeys(groupMatcher).Result;
+                result.AddRange(jobKeys);
+
+                //foreach (var jobKey in jobKeys)
+                //{
+                //    var detail = scheduler.GetJobDetail(jobKey);
+                //    var triggers = scheduler.GetTriggersOfJob(jobKey);
+                //    foreach (ITrigger trigger in triggers)
+                //    {
+                //        Console.WriteLine(group);
+                //        Console.WriteLine(jobKey.Name);
+                //        Console.WriteLine(detail.Description);
+                //        Console.WriteLine(trigger.Key.Name);
+                //        Console.WriteLine(trigger.Key.Group);
+                //        Console.WriteLine(trigger.GetType().Name);
+                //        Console.WriteLine(scheduler.GetTriggerState(trigger.Key));
+                //        DateTimeOffset? nextFireTime = trigger.GetNextFireTimeUtc();
+                //        if (nextFireTime.HasValue)
+                //        {
+                //            Console.WriteLine(nextFireTime.Value.LocalDateTime.ToString());
+                //        }
+
+                //        DateTimeOffset? previousFireTime = trigger.GetPreviousFireTimeUtc();
+                //        if (previousFireTime.HasValue)
+                //        {
+                //            Console.WriteLine(previousFireTime.Value.LocalDateTime.ToString());
+                //        }
+                //    }
+                //}
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Process to re-read module config
+        /// </summary>
+        private void RefreshModuleList()
+        {
+            Console.WriteLine("Read module config ...");
+
+            var listDeletedJobKeys = new List<JobKey>();
+            
+
+            var schedulerFactory = ScheduleHost.Services.GetRequiredService<ISchedulerFactory>();
+            var scheduler = schedulerFactory.GetScheduler().Result;
+
+            var modules = svcConfigReader.ReadModulesFromConfig();
+
+            var newModules = new List<ModuleDescriptor>(modules);
+
+            var jobKeys = GetAllJobKeys(scheduler);
+            foreach (var jobKey in jobKeys)
+            {
+                var validJob = modules.FirstOrDefault(x => String.Compare(x.ModuleName, jobKey.Name, true) == 0);
+                if (validJob == null)
+                    listDeletedJobKeys.Add(jobKey);
+                else
+                {
+                    var existingModule = newModules.FirstOrDefault(x => String.Compare(x.ModuleName, jobKey.Name, true) == 0);
+                    if (existingModule != null)
+                        newModules.Remove(existingModule);
+                }
+            }
+
+            foreach (var jobKey in listDeletedJobKeys)
+            {
+                scheduler.ResumeJob(jobKey);
+                scheduler.DeleteJob(jobKey);
+            }
+
+            if (newModules.Any())
+                StartProcessing(newModules);
+
         }
 
         private async Task AddJobToSchedule(ModuleDescriptor module, IExecutable moduleInstance)
