@@ -2,6 +2,7 @@
 
 namespace ModuleA
 {
+    [Serializable]
     public class ImportFtp : IExecutable
     {
         public string Info(string hostName)
@@ -9,9 +10,11 @@ namespace ModuleA
             return $"Description for FTP Import: {hostName}";
         }
 
-        public void Start()
+        public Task Start()
         {
             Console.WriteLine($"ModuleA: Starting process at {DateTime.Now}");
+
+            return Task.CompletedTask;
         }
     }
 }

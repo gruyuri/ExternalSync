@@ -2,7 +2,7 @@
 {
     public interface IExecutable
     {
-        void Start();
+        Task Start();
 
         string Info(string hostName);
     }

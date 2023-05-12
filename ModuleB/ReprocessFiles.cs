@@ -2,6 +2,7 @@
 
 namespace ModuleB
 {
+    [Serializable]
     public class ReprocessFiles : IExecutable
     {
         public string Info(string hostName)
@@ -9,9 +10,10 @@ namespace ModuleB
             return $"Description for ModuleB: {hostName}";
         }
 
-        public void Start()
+        public Task Start()
         {
             Console.WriteLine($"ModuleB: Starting process at {DateTime.Now}");
+            return Task.CompletedTask;
         }
     }
 }

@@ -1,13 +1,13 @@
 [
   {
     "moduleName": "ModuleA",
-    "cronExpr": "0 0 ? * * *",
+    "cronExpr": "0 0/1 * * * ?",
     "assemblyName": "D:\\MyProjects\\Repos\\ExternalSync\\ModuleA\\bin\\Debug\\net6.0\\ModuleA.dll"
   },
 
   {
     "moduleName": "ModuleB",
-    "cronExpr": "0 0 ? * * *",
+    "cronExpr": "0 0/2 * * * ?",
     "assemblyName": "D:\\MyProjects\\Repos\\ExternalSync\\ModuleB\\bin\\Debug\\net6.0\\\\ModuleB.dll"
   }
 ] 
